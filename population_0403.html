@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+
+<head>
+    <title>國土及人口</title>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <script src="js/d3.v4.min.js" charset="utf-8"></script>
+    <script src="js/topojson.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA0NwxVIUJi-2DvIB_8uS1nrj5Pnvhlaqw&libraries=places&language=zh-TW"></script>
+    <link rel="stylesheet" href="leaflet/leaflet.css" />
+    <script src="leaflet/leaflet.js"></script>
+    <script src="js/Leaflet.GoogleMutant.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            font-family: "Microsoft JhengHei", "DFKai-sb", "MingLiU", sans-serif;
+            font-size: 16px;
+        }
+
+        .container {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            /* background-image: url(img/population.png); */
+            width: 100vw;
+            height: 100vh;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: cover;
+            overflow: hidden;
+        }
+
+        .figure_1 {
+            width: 35vw;
+            height: 40vh;
+            margin-top: 30vh;
+            margin-right: 3vw;
+        }
+
+        .content {
+            width: 95%;
+            height: 100%;
+        }
+
+        #map {
+            width: 50vw;
+            height: 90vh;
+            margin-right: 5vw;
+            font-family: "Microsoft JhengHei", "DFKai-sb", "MingLiU", sans-serif;
+            font-size: 16px;
+        }
+
+        h1 {
+            color: #996400;
+            margin-bottom: 10px;
+        }
+
+        .legend {
+            line-height: 18px;
+            color: #555;
+        }
+
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="figure_1">
+            <h1>2017年縣市各年齡組人口數</h1>
+            <div class="content"></div>
+        </div>
+        <div class="figure">
+            <h1>2017年各縣市人口</h1>
+            <div id='map'></div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+
+        var year = 2017,
+            county = "臺北市",
+            formatNumber = d3.format(",.1f"),
+            color = d3.scaleOrdinal(d3.schemeCategory10);
+
+        d3.json("data/population.json", function (error, dataSet) {
+            if (error) throw error;
+
+            var popData = dataSet.filter(function (d) { return d.year == year });
+
+            popData.forEach(function (d) {
+                d.population = +d.population;
+            });
+
+            var population = [];
+            for (var i = 0; i < popData.length; i++) {
+                population[popData[i].countyName] = popData[i].population / 10000;
+            }
+
+            d3.json("data/taiwan.json", function (error, topoData) {
+                if (error)
+                    return console.log(error);
+
+                var geoData = topojson.feature(topoData, topoData.objects.COUNTY_MOI_1060525);
+
+                for (var i = 0; i < geoData.features.length; i++) {
+                    geoData.features[i].properties.density = population[geoData.features[i].properties.COUNTYNAME];
+                }
+
+                var map = L.map('map', { minZoom: 8, maxZoom: 8 }).setView([23.9, 121], 8)
+                    .setMaxBounds([[26.534314, 123.608165], [21.447784, 117.681041]]);
+
+                var roads = L.gridLayer.googleMutant({
+                    type: 'roadmap'
+                }).addTo(map);
+
+                var styled = L.gridLayer.googleMutant({
+                    type: 'roadmap',
+                    styles: [
+                        { elementType: 'labels', stylers: [{ visibility: 'on' }] },
+                        { featureType: 'water', stylers: [{ color: 'blue' }] }
+                    ]
+                }).addTo(map);
+
+                function getColor(d) {
+                    return d > 350 ? '#800026' :
+                        d > 300 ? '#BD0026' :
+                            d > 250 ? '#E31A1C' :
+                                d > 200 ? '#FC4E2A' :
+                                    d > 150 ? '#FD8D3C' :
+                                        d > 100 ? '#FEB24C' :
+                                            d > 50 ? '#FED976' :
+                                                '#FFEDA0';
+                }
+
+                function style(feature) {
+                    return {
+                        weight: 2,
+                        opacity: 1,
+                        color: 'white',
+                        dashArray: '3',
+                        fillOpacity: 0.7,
+                        fillColor: getColor(feature.properties.density)
+                    };
+                }
+
+                function highlightFeature(e) {
+                    var layer = e.target;
+
+                    layer.setStyle({
+                        weight: 2,
+                        color: '#666',
+                        dashArray: '',
+                        fillOpacity: 0.7
+                    });
+
+                    if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                        layer.bringToFront();
+                    }
+
+                    // info.update(layer.feature.properties);
+                }
+
+                var geojson;
+
+                function resetHighlight(e) {
+                    geojson.resetStyle(e.target);
+                    // info.update();
+                }
+
+                function zoomToFeature(e) {
+                    map.fitBounds(e.target.getBounds());
+                }
+
+                function onEachFeature(feature, layer) {
+                    layer.on({
+                        mouseover: highlightFeature,
+                        mouseout: resetHighlight,
+                        click: onMapClick
+                    });
+
+                    layer.bindTooltip(feature.properties.COUNTYNAME + '<br>' + formatNumber(feature.properties.density) + "萬人");
+                }
+
+                geojson = L.geoJson(geoData, {
+                    style: style,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+
+                console.log(geojson);
+
+
+                function onMapClick(e) {
+                    console.log(e.target.feature.properties.COUNTYNAME);
+                    // update(e.target.feature.properties.COUNTYNAME);
+
+                }
+
+                var legend = L.control({ position: 'bottomright' });
+
+                legend.onAdd = function (map) {
+
+                    var div = L.DomUtil.create('div', 'info legend'),
+                        grades = [0, 50, 100, 150, 200, 250, 300, 350, 400],
+                        labels = [];
+
+                    for (var i = 0; i < grades.length - 1; i++) {
+                        div.innerHTML +=
+                            '<i style="background:' + getColor(grades[i] + 1) + '"></i> ' +
+                            d3.format(",")(grades[i]) + (formatNumber(grades[i + 1]) ? '&ndash;' + d3.format(",")(grades[i + 1]) + '<br>' : '+');
+                    }
+
+                    return div;
+                };
+
+                legend.addTo(map);
+
+            })
+        })
+
+        var margin = { top: 10, right: 10, bottom: 10, left: 10 },
+            width = parseInt(d3.select(".content").style("width"), 10) - margin.left - margin.right,
+            height = parseInt(d3.select(".content").style("height"), 10) - margin.top - margin.bottom;
+
+        var radius = Math.min(width, height) / 2;
+
+        var pieData = d3.pie()
+            .sort(null)
+            .value(function (d) { return d.value; });
+
+        var arc = d3.arc()
+            .outerRadius(radius * 0.8)
+            .innerRadius(radius * 0.4)
+            .padAngle(0.005)
+            .cornerRadius(6);
+
+        var labelArc = d3.arc()
+            .outerRadius(radius * 0.9)
+            .innerRadius(radius * 0.9);
+
+        var label = d3.arc()
+            .outerRadius(radius - 40)
+            .innerRadius(radius - 40);
+
+        var svg = d3.select(".content").append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
+            .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
+
+        d3.json("data/population_1.json", function (error, dataSet) {
+            if (error) throw error;
+
+            dataSet.forEach(function (d) {
+                d.county = d.county;
+                d.age = d.age;
+                d.value = +d.value / 10000;
+            });
+
+            // console.log(dataSet);
+
+            var newData = dataSet.filter(function (d) { return d.county == county; });
+
+            console.log(newData);
+
+            var g = svg.selectAll(".arc")
+                .data(pieData(newData))
+                .enter()
+                .append("g")
+                .attr("class", "arc");
+
+            g.append("path")
+                .attr("d", arc)
+                .attr("id", function (d, i) { return "arc-" + i })
+                .style("fill", function (d) { return color(d.data.age); });
+
+            g.append("text")
+                .attr("dy", ".35em")
+                .style("text-anchor", "middle")
+                .text(function (d) { return d.data.county; })
+                .attr("font-size", "24px");
+
+            g.append("text")
+                .attr("transform", function (d, i) {
+                    var pos = labelArc.centroid(d);
+                    // pos[0] = radius * (midAngle(d) < Math.PI ? 1.1 : -1.1);
+                    pos[0] = radius * (midAngle(d) < Math.PI ? 1.0 : -1.4);
+
+                    var percent = (d.endAngle - d.startAngle) / (2 * Math.PI) * 100
+                    if (percent < 3) {
+                        pos[1] += i * 15
+                    }
+                    return "translate(" + pos + ")";
+                })
+                .text(function (d) { return d.data.age + "：" + formatNumber(d.data.value) + "萬人"; })
+
+
+                .attr("fill", function (d) { return color(d.data.age); })
+                .style("font-size", 14)
+                .attr("text-anchor", 'left')
+                .attr("dx", function (d) {
+                    var ac = midAngle(d) < Math.PI ? 0 : -50
+                    return ac
+                })
+                .attr("dy", 5)
+
+
+            function midAngle(d) {
+                return d.startAngle + (d.endAngle - d.startAngle) / 2;
+            }
+
+            var polyline = g.selectAll("polyline")
+                .data(pieData(newData), function (d) {
+                    return d.data.age;
+                })
+                .enter()
+                .append("polyline")
+                .attr("points", function (d, i) {
+                    var pos = labelArc.centroid(d);
+                    pos[0] = radius * 0.95 * (midAngle(d) < Math.PI ? 1 : -1);
+                    var o = labelArc.centroid(d)
+                    var percent = (d.endAngle - d.startAngle) / (2 * Math.PI) * 100
+                    if (percent < 3) {
+                        o[1]
+                        pos[1] += i * 15
+                    }
+                    return [label.centroid(d), [o[0], pos[1]], pos];
+                })
+                .style("fill", "none")
+                .attr("stroke", function (d) { return color(d.data.age); })
+                .style("stroke-width", "1px");
+
+
+            // function update(county) {
+            //     console.log(county);
+            // }
+
+
+
+
+
+        })
+        // https://www.visualcinnamon.com/2015/09/placing-text-on-arcs.html
+        // .on("click", up)
+        // http://duspviz.mit.edu/web-map-workshop/
+        // http://bl.ocks.org/KatiRG/cccd23dd7a830da0de5c
+        // https://github.com/shitao1988/leaflet-echartmarker
+        // https://cambridge-intelligence.com/visualizing-your-geospatial-graph-data-part-1/
+        // http://www.marsgis.cn/leaflet/docs/
+    </script>
+
+</body>
+
+</html>
