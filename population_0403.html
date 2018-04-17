@@ -8,10 +8,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <script src="js/d3.v4.min.js" charset="utf-8"></script>
     <script src="js/topojson.min.js"></script>
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA0NwxVIUJi-2DvIB_8uS1nrj5Pnvhlaqw&libraries=places&language=zh-TW"></script>
     <link rel="stylesheet" href="leaflet/leaflet.css" />
     <script src="leaflet/leaflet.js"></script>
-    <script src="js/Leaflet.GoogleMutant.js"></script>
     <style>
         * {
             margin: 0;
@@ -30,7 +28,7 @@
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            /* background-image: url(img/population.png); */
+            background-image: url(img/population.png);
             width: 100vw;
             height: 100vh;
             background-position: center;
@@ -66,7 +64,7 @@
 
         .legend {
             line-height: 18px;
-            color: #555;
+            color: black;
         }
 
         .legend i {
@@ -123,19 +121,12 @@
                     geoData.features[i].properties.density = population[geoData.features[i].properties.COUNTYNAME];
                 }
 
-                var map = L.map('map', { minZoom: 8, maxZoom: 8 }).setView([23.9, 121], 8)
+                var map = L.map('map', { minZoom: 8, maxZoom: 8 }).setView([23.6, 121], 8)
                     .setMaxBounds([[26.534314, 123.608165], [21.447784, 117.681041]]);
 
-                var roads = L.gridLayer.googleMutant({
-                    type: 'roadmap'
-                }).addTo(map);
-
-                var styled = L.gridLayer.googleMutant({
-                    type: 'roadmap',
-                    styles: [
-                        { elementType: 'labels', stylers: [{ visibility: 'on' }] },
-                        { featureType: 'water', stylers: [{ color: 'blue' }] }
-                    ]
+                L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
+                    // attribution: '© <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+                    attribution: '© <a href="http://www.nlsc.gov.tw/">內政部國土測繪中心</a> contributors'
                 }).addTo(map);
 
                 function getColor(d) {
@@ -173,15 +164,12 @@
                     if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
                         layer.bringToFront();
                     }
-
-                    // info.update(layer.feature.properties);
                 }
 
                 var geojson;
 
                 function resetHighlight(e) {
                     geojson.resetStyle(e.target);
-                    // info.update();
                 }
 
                 function zoomToFeature(e) {
@@ -203,13 +191,11 @@
                     onEachFeature: onEachFeature
                 }).addTo(map);
 
-                console.log(geojson);
-
+                // console.log(geojson);
 
                 function onMapClick(e) {
-                    console.log(e.target.feature.properties.COUNTYNAME);
-                    // update(e.target.feature.properties.COUNTYNAME);
-
+                    // console.log(e.target.feature.properties.COUNTYNAME);
+                    update(e.target.feature.properties.COUNTYNAME);
                 }
 
                 var legend = L.control({ position: 'bottomright' });
@@ -264,6 +250,10 @@
             .append("g")
             .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
 
+        function midAngle(d) {
+            return d.startAngle + (d.endAngle - d.startAngle) / 2;
+        }
+
         d3.json("data/population_1.json", function (error, dataSet) {
             if (error) throw error;
 
@@ -277,7 +267,7 @@
 
             var newData = dataSet.filter(function (d) { return d.county == county; });
 
-            console.log(newData);
+            // console.log(newData);
 
             var g = svg.selectAll(".arc")
                 .data(pieData(newData))
@@ -291,12 +281,14 @@
                 .style("fill", function (d) { return color(d.data.age); });
 
             g.append("text")
+                .attr("class", "updateText")
                 .attr("dy", ".35em")
                 .style("text-anchor", "middle")
                 .text(function (d) { return d.data.county; })
                 .attr("font-size", "24px");
 
             g.append("text")
+                .attr("class", "labelText")
                 .attr("transform", function (d, i) {
                     var pos = labelArc.centroid(d);
                     // pos[0] = radius * (midAngle(d) < Math.PI ? 1.1 : -1.1);
@@ -309,8 +301,6 @@
                     return "translate(" + pos + ")";
                 })
                 .text(function (d) { return d.data.age + "：" + formatNumber(d.data.value) + "萬人"; })
-
-
                 .attr("fill", function (d) { return color(d.data.age); })
                 .style("font-size", 14)
                 .attr("text-anchor", 'left')
@@ -318,12 +308,7 @@
                     var ac = midAngle(d) < Math.PI ? 0 : -50
                     return ac
                 })
-                .attr("dy", 5)
-
-
-            function midAngle(d) {
-                return d.startAngle + (d.endAngle - d.startAngle) / 2;
-            }
+                .attr("dy", 5);
 
             var polyline = g.selectAll("polyline")
                 .data(pieData(newData), function (d) {
@@ -345,17 +330,104 @@
                 .style("fill", "none")
                 .attr("stroke", function (d) { return color(d.data.age); })
                 .style("stroke-width", "1px");
-
-
-            // function update(county) {
-            //     console.log(county);
-            // }
-
-
-
-
-
         })
+
+        function update(county) {
+            d3.json("data/population_1.json", function (error, dataSet) {
+                if (error) throw error;
+
+                dataSet.forEach(function (d) {
+                    d.county = d.county;
+                    d.age = d.age;
+                    d.value = +d.value / 10000;
+                });
+
+                var newData = dataSet.filter(function (d) { return d.county == county; });
+
+                var pieData = d3.pie()
+                    .sort(null)
+                    .value(function (d) { return d.value; })(newData);
+
+                var path = d3.select(".content").selectAll("path").data(pieData);
+
+                var transitionDuration = 500;
+
+                function arcTween(d) {
+                    var i = d3.interpolate(this._current, d);
+                    this._current = i(0);
+                    return function (t) {
+                        return arc(i(t))
+                    }
+                }
+
+                path.transition().duration(transitionDuration).attrTween("d", arcTween);
+
+                d3.selectAll(".updateText")
+                    .transition().duration(transitionDuration)
+                    .style("opacity", 0)
+                    .transition().duration(transitionDuration)
+                    .style("opacity", 1)
+                    .text(county);
+
+                console.log(pieData);
+
+                var updateLabels = d3.selectAll(".labelText")
+                    .data(pieData)
+                    .transition().duration(transitionDuration)
+                    .style("opacity", 0)
+                    .transition().duration(transitionDuration)
+                    .style("opacity", 1)
+                    .attr("transform", function (d, i) {
+                        var pos = labelArc.centroid(d);
+                        // pos[0] = radius * (midAngle(d) < Math.PI ? 1.1 : -1.1);
+                        pos[0] = radius * (midAngle(d) < Math.PI ? 1.0 : -1.4);
+
+                        var percent = (d.endAngle - d.startAngle) / (2 * Math.PI) * 100
+                        if (percent < 3) {
+                            pos[1] += i * 15
+                        }
+                        return "translate(" + pos + ")";
+                    })
+                    .text(function (d) { console.log(d); return d.data.age + "：" + formatNumber(d.data.value) + "萬人"; })
+                    .attr("dx", function (d) {
+                        var ac = midAngle(d) < Math.PI ? 0 : -50
+                        return ac
+                    })
+                    .attr("dy", 5);
+
+                var updateLines = d3.selectAll("polyline")
+                    .data(pieData, function (d) {
+                        return d.data.age;
+                    })
+                    // .transition().duration(transitionDuration)
+                    // .style("opacity", 0)
+                    // .transition().duration(transitionDuration)
+                    // .style("opacity", 1)
+                    .attr("points", function (d, i) {
+                        var pos = labelArc.centroid(d);
+                        pos[0] = radius * 0.95 * (midAngle(d) < Math.PI ? 1 : -1);
+                        var o = labelArc.centroid(d)
+                        var percent = (d.endAngle - d.startAngle) / (2 * Math.PI) * 100
+                        if (percent < 3) {
+                            o[1]
+                            pos[1] += i * 15
+                        }
+                        return [label.centroid(d), [o[0], pos[1]], pos];
+                    });
+
+                updateLines.exit()
+                    .remove();
+
+
+
+
+
+            })
+
+        }
+
+
+
         // https://www.visualcinnamon.com/2015/09/placing-text-on-arcs.html
         // .on("click", up)
         // http://duspviz.mit.edu/web-map-workshop/
@@ -363,6 +435,11 @@
         // https://github.com/shitao1988/leaflet-echartmarker
         // https://cambridge-intelligence.com/visualizing-your-geospatial-graph-data-part-1/
         // http://www.marsgis.cn/leaflet/docs/
+        // https://github.com/d3/d3-shape/blob/master/README.md#pie_value
+        // https://eventbrite.github.io/britecharts/index.html
+        // https://bl.ocks.org/mbhall88/22f91dc6c9509b709defde9dc29c63f2    
+        // http://blockbuilder.org/DDDDDanica/69458589f62093d8ec5c6b2ea3a70b6d
+        // https://bl.ocks.org/mbhall88/22f91dc6c9509b709defde9dc29c63f2
     </script>
 
 </body>
